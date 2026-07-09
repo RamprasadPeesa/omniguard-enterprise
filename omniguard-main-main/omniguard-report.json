@@ -1,0 +1,58 @@
+{
+  "generated_at": "2026-07-08T14:02:20.588Z",
+  "directory": "E:\\omniguard-enterprise\\omniguard-main-main",
+  "files_scanned": 140,
+  "total_findings": 5,
+  "by_severity": {
+    "medium": 2,
+    "high": 2,
+    "critical": 1
+  },
+  "findings": [
+    {
+      "scanner": "secret",
+      "rule_id": "SECRET-PEM-001",
+      "severity": "medium",
+      "title": "PEM Certificate detected",
+      "evidence": "----...(2  7)...----",
+      "file_path": "E:\\omniguard-enterprise\\omniguard-main-main\\cli\\src\\index.js",
+      "line_start": 105
+    },
+    {
+      "scanner": "secret",
+      "rule_id": "SECRET-JWT-001",
+      "severity": "high",
+      "title": "JWT Token detected",
+      "evidence": "eyJh...(208)...uWKE",
+      "file_path": "E:\\omniguard-enterprise\\omniguard-main-main\\omniguard-main\\docs\\CLOUD-DEPLOYMENT-GUIDE.md",
+      "line_start": 131
+    },
+    {
+      "scanner": "secret",
+      "rule_id": "SECRET-JWT-001",
+      "severity": "high",
+      "title": "JWT Token detected",
+      "evidence": "eyJh...(208)...uWKE",
+      "file_path": "E:\\omniguard-enterprise\\omniguard-main-main\\omniguard-main\\docs\\LOCAL-DEVELOPMENT-GUIDE.md",
+      "line_start": 93
+    },
+    {
+      "scanner": "secret",
+      "rule_id": "SECRET-SSH-001",
+      "severity": "critical",
+      "title": "SSH Private Key detected",
+      "evidence": "----...(27)...----",
+      "file_path": "E:\\omniguard-enterprise\\omniguard-main-main\\omniguard-main\\scanner\\src\\scanners\\secret-scanner.ts",
+      "line_start": 314
+    },
+    {
+      "scanner": "secret",
+      "rule_id": "SECRET-PEM-001",
+      "severity": "medium",
+      "title": "PEM Certificate detected",
+      "evidence": "----...(27)...----",
+      "file_path": "E:\\omniguard-enterprise\\omniguard-main-main\\omniguard-main\\scanner\\src\\scanners\\secret-scanner.ts",
+      "line_start": 314
+    }
+  ]
+}
