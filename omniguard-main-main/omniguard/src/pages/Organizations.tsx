@@ -1,44 +1,42 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
-import { Building2, Plus, RefreshCw, Shield, Users, Globe, Crown, Search, Filter } from 'lucide-react'
+import { PageHeader, Card, EmptyState, LoadingSpinner, RelativeTime, StatusBadge } from '../components/ui'
+import { Building2, Plus, RefreshCw, Crown, Shield, Users } from 'lucide-react'
 
-type Org = { id: string; name: string; slug: string; plan: string; created_at: string; updated_at: string; settings?: Record<string, unknown> | null }
-type Member = { id: string; organization_id: string; role: string; status: string; created_at: string; org?: Org }
+interface OrgRow { id: string; name: string; slug: string; plan: string; created_at: string }
+interface MemberRow { id: string; organization_id: string; role: string; status: string; created_at: string; org?: OrgRow }
 
 export function Organizations() {
   const { user, currentOrganizationId, setCurrentOrganizationId, canManageOrg } = useAuth()
-  const [organizations, setOrganizations] = useState<Org[]>([])
-  const [memberships, setMemberships] = useState<Member[]>([])
+  const [orgs, setOrgs] = useState<OrgRow[]>([])
+  const [memberships, setMemberships] = useState<MemberRow[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
-  const [query, setQuery] = useState('')
-  const [savingOrg, setSavingOrg] = useState<string | null>(null)
-  const activeOrg = useMemo(() => organizations.find(o => o.id === currentOrganizationId) || null, [organizations, currentOrganizationId])
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!user) return
     setLoading(true)
-    const [{ data: mems }, { data: orgs }] = await Promise.all([
+    const [{ data: mems }, { data: orgRows }] = await Promise.all([
       supabase.from('organization_members').select('id, organization_id, role, status, created_at').eq('user_id', user.id).eq('status', 'active'),
-      supabase.from('organizations').select('id, name, slug, plan, created_at, updated_at, settings').order('created_at', { ascending: false }),
+      supabase.from('organizations').select('id, name, slug, plan, created_at').order('created_at', { ascending: false }),
     ])
-    const orgMap = Object.fromEntries((orgs || []).map(o => [o.id, o]))
-    setOrganizations((orgs || []) as Org[])
-    setMemberships(((mems || []) as Member[]).map(m => ({ ...m, org: orgMap[m.organization_id] })))
+    const orgMap = Object.fromEntries((orgRows || []).map(o => [o.id, o]))
+    setOrgs((orgRows || []) as OrgRow[])
+    setMemberships(((mems || []) as MemberRow[]).map(m => ({ ...m, org: orgMap[m.organization_id] })))
     if (!currentOrganizationId && mems?.length) setCurrentOrganizationId(mems[0].organization_id)
     setLoading(false)
-  }
+  }, [user, currentOrganizationId, setCurrentOrganizationId])
 
-  useEffect(() => { load() }, [user?.id])
+  useEffect(() => { load() }, [load])
 
   const createOrg = async () => {
-    if (!name.trim()) return
+    if (!name.trim() || !user) return
     setCreating(true)
     const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
     const { data: org } = await supabase.from('organizations').insert({ name: name.trim(), slug, plan: 'free', settings: {} }).select().single()
-    if (org && user) {
+    if (org) {
       await supabase.from('organization_members').insert({ organization_id: org.id, user_id: user.id, role: 'owner', status: 'active' })
       await load()
       setCurrentOrganizationId(org.id)
@@ -47,102 +45,103 @@ export function Organizations() {
     setCreating(false)
   }
 
-  const updateOrg = async (orgId: string, patch: Partial<Pick<Org, 'name' | 'slug' | 'plan'>>) => {
-    if (!canManageOrg) return
-    setSavingOrg(orgId)
-    await supabase.from('organizations').update(patch).eq('id', orgId)
-    await load()
-    setSavingOrg(null)
+  const roleIcon: Record<string, React.ReactNode> = {
+    owner: <Crown className="w-3 h-3" style={{ color: 'var(--warning-text)' }} />,
+    admin: <Shield className="w-3 h-3" style={{ color: 'var(--accent)' }} />,
+    developer: <Users className="w-3 h-3" style={{ color: 'var(--text-subtle)' }} />,
+    viewer: <Users className="w-3 h-3" style={{ color: 'var(--text-subtle)' }} />,
   }
 
-  const visibleOrgs = organizations.filter(o => !query || `${o.name} ${o.slug} ${o.plan}`.toLowerCase().includes(query.toLowerCase()))
-
   return (
-    <div className="p-8 space-y-6 animate-fade-in bg-slate-50 min-h-full">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Organizations</h1>
-          <p className="text-slate-500 mt-1">Tenant administration, membership, and billing context</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={load} className="btn-secondary"><RefreshCw className="w-4 h-4" />Refresh</button>
-          <button onClick={() => setCurrentOrganizationId(activeOrg?.id || memberships[0]?.organization_id || '')} className="btn-primary" disabled={!activeOrg}><Globe className="w-4 h-4" />Set Active</button>
-        </div>
-      </div>
+    <div className="p-8 animate-fade-in">
+      <PageHeader
+        title="Organizations"
+        description="Tenant administration, membership, and plan context"
+        actions={<button onClick={load} className="btn-secondary"><RefreshCw className="w-4 h-4" /> Refresh</button>}
+      />
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="card p-5 lg:col-span-1">
-          <div className="flex items-center gap-2 mb-4"><Plus className="w-4 h-4 text-slate-700" /><h2 className="text-sm font-semibold text-slate-700">Create Organization</h2></div>
-          <div className="space-y-3">
-            <input className="input" placeholder="Organization name" value={name} onChange={e => setName(e.target.value)} />
-            <button onClick={createOrg} disabled={creating || !name.trim()} className="btn-primary w-full justify-center">{creating ? 'Creating...' : 'Create tenant'}</button>
-          </div>
-        </div>
-
-        <div className="card p-5 lg:col-span-2">
-          <div className="flex items-center gap-2 mb-4"><Building2 className="w-4 h-4 text-slate-700" /><h2 className="text-sm font-semibold text-slate-700">Active Organization</h2></div>
-          {activeOrg ? (
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="bg-slate-50 rounded-lg border border-slate-200 p-4">
-                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Name</p>
-                <input className="input" value={activeOrg.name} onChange={e => setOrganizations(prev => prev.map(o => o.id === activeOrg.id ? { ...o, name: e.target.value } : o))} onBlur={e => updateOrg(activeOrg.id, { name: e.target.value })} disabled={!canManageOrg} />
-              </div>
-              <div className="bg-slate-50 rounded-lg border border-slate-200 p-4">
-                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Slug</p>
-                <input className="input" value={activeOrg.slug} onChange={e => setOrganizations(prev => prev.map(o => o.id === activeOrg.id ? { ...o, slug: e.target.value } : o))} onBlur={e => updateOrg(activeOrg.id, { slug: e.target.value })} disabled={!canManageOrg} />
-              </div>
-              <div className="bg-slate-50 rounded-lg border border-slate-200 p-4">
-                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Plan</p>
-                <select className="input" value={activeOrg.plan} onChange={e => updateOrg(activeOrg.id, { plan: e.target.value })} disabled={!canManageOrg}>
-                  <option value="free">Free</option>
-                  <option value="pro">Pro</option>
-                  <option value="enterprise">Enterprise</option>
-                </select>
-              </div>
-              <div className="bg-slate-50 rounded-lg border border-slate-200 p-4">
-                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Created</p>
-                <p className="text-slate-800">{new Date(activeOrg.created_at).toLocaleString()}</p>
-              </div>
+      {loading ? <LoadingSpinner label="Loading organizations..." /> : (
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Create org */}
+          <Card padding="p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Plus className="w-4 h-4" style={{ color: 'var(--accent)' }} />
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Create Organization</h2>
             </div>
-          ) : <p className="text-slate-500">No active organization selected.</p>}
-        </div>
-      </div>
-
-      <div className="card p-4 flex flex-wrap items-center gap-3">
-        <Search className="w-4 h-4 text-slate-400" />
-        <input className="input max-w-sm" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search organizations..." />
-        <Filter className="w-4 h-4 text-slate-400" />
-        <span className="text-sm text-slate-500">{visibleOrgs.length} visible</span>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="card p-5">
-          <div className="flex items-center gap-2 mb-4"><Users className="w-4 h-4 text-slate-700" /><h2 className="text-sm font-semibold text-slate-700">Memberships</h2></div>
-          <div className="space-y-2">
-            {memberships.map(m => (
-              <button key={m.id} onClick={() => setCurrentOrganizationId(m.organization_id)} className={`w-full text-left p-3 rounded-lg border transition-colors ${currentOrganizationId === m.organization_id ? 'border-slate-400 bg-slate-100' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-slate-900 font-medium">{m.org?.name || m.organization_id}</p>
-                    <p className="text-xs text-slate-500">{m.org?.slug || 'org'} · {m.org?.plan || 'free'}</p>
-                  </div>
-                  <span className="badge text-xs bg-slate-100 text-slate-700 capitalize">{m.role}</span>
-                </div>
+            <div className="space-y-3">
+              <input className="input" placeholder="Organization name" value={name} onChange={e => setName(e.target.value)} />
+              <button onClick={createOrg} disabled={creating || !name.trim()} className="btn-primary w-full justify-center">
+                {creating ? 'Creating...' : 'Create tenant'}
               </button>
-            ))}
-          </div>
-        </div>
+            </div>
+          </Card>
 
-        <div className="card p-5 lg:col-span-2">
-          <div className="flex items-center gap-2 mb-4"><Shield className="w-4 h-4 text-slate-700" /><h2 className="text-sm font-semibold text-slate-700">Tenant Controls</h2></div>
-          <div className="grid md:grid-cols-3 gap-3 text-sm">
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4"><p className="text-xs text-slate-500 uppercase tracking-wide">Organizations</p><p className="text-slate-900 mt-1">{organizations.length}</p></div>
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4"><p className="text-xs text-slate-500 uppercase tracking-wide">Active members</p><p className="text-slate-900 mt-1">{memberships.length}</p></div>
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4"><p className="text-xs text-slate-500 uppercase tracking-wide">Selected org</p><p className="text-slate-900 mt-1">{activeOrg?.name || 'None'}</p></div>
-          </div>
-          <p className="text-slate-500 text-sm mt-4">Member permissions are enforced through Supabase RLS and the API gateway. Admins can switch the active tenant from this page.</p>
+          {/* Memberships */}
+          <Card padding="p-5" className="lg:col-span-2">
+            <div className="flex items-center gap-2 mb-4">
+              <Building2 className="w-4 h-4" style={{ color: 'var(--text-subtle)' }} />
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Your Memberships ({memberships.length})</h2>
+            </div>
+            {memberships.length === 0 ? (
+              <EmptyState icon={Building2} title="No memberships" description="Create an organization to get started" />
+            ) : (
+              <div className="space-y-2">
+                {memberships.map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => setCurrentOrganizationId(m.organization_id)}
+                    className="w-full text-left p-3 rounded-md transition-colors"
+                    style={{
+                      background: currentOrganizationId === m.organization_id ? 'var(--accent-soft)' : 'var(--surface-2)',
+                      border: currentOrganizationId === m.organization_id ? '1px solid var(--accent)' : '1px solid var(--border)',
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{m.org?.name || m.organization_id}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>{m.org?.slug} · {m.org?.plan}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {roleIcon[m.role]}
+                        <span className="text-xs capitalize" style={{ color: 'var(--text-muted)' }}>{m.role}</span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* All orgs (admin view) */}
+          {orgs.length > 0 && (
+            <Card padding="p-5" className="lg:col-span-3">
+              <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--text)' }}>All Organizations ({orgs.length})</h2>
+              <div className="overflow-x-auto scrollbar">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Slug</th>
+                      <th>Plan</th>
+                      <th>Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orgs.map(o => (
+                      <tr key={o.id}>
+                        <td><span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{o.name}</span></td>
+                        <td><span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{o.slug}</span></td>
+                        <td><span className="badge badge-neutral capitalize">{o.plan}</span></td>
+                        <td><RelativeTime date={o.created_at} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
         </div>
-      </div>
+      )}
     </div>
   )
 }

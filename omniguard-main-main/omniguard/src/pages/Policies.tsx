@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { supabase, supabaseAuth, Tables } from '../lib/supabase'
-import { Shield, Plus, CircleCheck as CheckCircle, FileText, Trash2, Archive, Upload, X } from 'lucide-react'
+import { PageHeader, Card, StatCard, EmptyState, LoadingSpinner, Modal, StatusBadge, RelativeTime } from '../components/ui'
+import { Shield, Plus, FileText, Trash2, Archive, CircleCheck as CheckCircle2, X, Loader as Loader2 } from 'lucide-react'
 
 type Policy = Tables<'policies'>
 
@@ -12,31 +13,37 @@ export function Policies() {
   const [policies, setPolicies] = useState<Policy[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
-  const [selected, setSelected] = useState<string | null>(null)
   const [form, setForm] = useState({ title: '', category: '', description: '', content: '', severity: 'high' })
   const [saving, setSaving] = useState(false)
-  const [uploadLoading, setUploadLoading] = useState(false)
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!currentOrganizationId) return
-    supabase.from('policies').select('*').eq('organization_id', currentOrganizationId).is('deleted_at', null)
+    setLoading(true)
+    const { data } = await supabase.from('policies').select('*')
+      .eq('organization_id', currentOrganizationId).is('deleted_at', null)
       .order('created_at', { ascending: false })
-      .then(({ data }) => { setPolicies((data as Policy[]) || []); setLoading(false) })
+    setPolicies((data as Policy[]) || [])
+    setLoading(false)
   }, [currentOrganizationId])
+
+  useEffect(() => { load() }, [load])
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!currentOrganizationId || !form.title.trim() || !form.content.trim()) return
+    if (!form.title.trim() || !form.content.trim()) return
     setSaving(true)
     const { data, error } = await supabase.from('policies').insert({
       organization_id: currentOrganizationId, created_by: user?.id,
       title: form.title, category: form.category || null, description: form.description || null,
       content: form.content, severity: form.severity, status: 'draft',
+      policy_type: 'builtin', enforcement_mode: 'audit', enabled: true,
     }).select().single()
     setSaving(false)
     if (!error && data) {
       setPolicies(prev => [data as Policy, ...prev])
-      setShowCreate(false); setForm({ title: '', category: '', description: '', content: '', severity: 'high' })
+      setShowCreate(false)
+      setForm({ title: '', category: '', description: '', content: '', severity: 'high' })
+      // Trigger ingestion for embeddings
       const { data: { session } } = await supabaseAuth.getSession()
       if (session) {
         fetch(`${API}/policy-ingest`, {
@@ -48,125 +55,120 @@ export function Policies() {
     }
   }
 
-  const uploadDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file || !currentOrganizationId) return
-    setUploadLoading(true)
-    const { data: { session } } = await supabaseAuth.getSession()
-    if (!session) { setUploadLoading(false); return }
-    const formData = new FormData(); formData.append('file', file); formData.append('organization_id', currentOrganizationId)
-    try {
-      const res = await fetch(`${API}/policy-ingest`, { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` }, body: formData })
-      const json = await res.json()
-      if (json.policy) setPolicies(prev => [json.policy as Policy, ...prev])
-    } catch {
-      // Non-fatal: ingest errors are surfaced through the policy list and backend logs.
-    }
-    setUploadLoading(false); e.target.value = ''
-  }
-
   const activate = async (id: string) => {
     await supabase.from('policies').update({ status: 'active', approved_by: user?.id, approved_at: new Date().toISOString() }).eq('id', id)
     setPolicies(prev => prev.map(p => p.id === id ? { ...p, status: 'active' as const } : p))
   }
+
   const archive = async (id: string) => {
     await supabase.from('policies').update({ status: 'archived' }).eq('id', id)
     setPolicies(prev => prev.map(p => p.id === id ? { ...p, status: 'archived' as const } : p))
   }
+
   const del = async (id: string) => {
-    if (!confirm('Delete policy?')) return
+    if (!confirm('Delete this policy?')) return
     await supabase.from('policies').update({ deleted_at: new Date().toISOString() }).eq('id', id)
     setPolicies(prev => prev.filter(p => p.id !== id))
   }
 
-  const sColor: Record<string, string> = { draft: 'bg-slate-100 text-slate-700 border-slate-200', active: 'bg-emerald-50 text-emerald-700 border-emerald-200', archived: 'bg-slate-50 text-slate-500 border-slate-200' }
+  const active = policies.filter(p => p.status === 'active').length
+  const draft = policies.filter(p => p.status === 'draft').length
+  const archived = policies.filter(p => p.status === 'archived').length
 
   return (
-    <div className="p-8 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Security Policies</h1>
-          <p className="text-slate-600 mt-1">Rules enforced across all repositories and scanner outputs</p>
-        </div>
-        <div className="flex gap-2">
-          <label className={`btn-secondary cursor-pointer ${uploadLoading ? 'opacity-50' : ''}`}>
-            <Upload className="w-4 h-4" />{uploadLoading ? 'Processing...' : 'Upload Document'}
-            <input type="file" accept=".pdf,.docx,.md,.txt,.html" className="hidden" onChange={uploadDoc} disabled={uploadLoading} />
-          </label>
-          <button onClick={() => setShowCreate(true)} className="btn-primary"><Plus className="w-4 h-4" />New Policy</button>
-        </div>
+    <div className="p-8 animate-fade-in">
+      <PageHeader
+        title="Security Policies"
+        description="Governance rules enforced across repositories and scans"
+        actions={<button onClick={() => setShowCreate(true)} className="btn-primary"><Plus className="w-4 h-4" /> New Policy</button>}
+      />
+
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <StatCard label="Active" value={active} icon={CheckCircle2} />
+        <StatCard label="Drafts" value={draft} icon={FileText} />
+        <StatCard label="Archived" value={archived} icon={Archive} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[['Active', policies.filter(p => p.status === 'active').length, 'text-emerald-700'],
-          ['Draft', policies.filter(p => p.status === 'draft').length, 'text-amber-700'],
-          ['Archived', policies.filter(p => p.status === 'archived').length, 'text-slate-500']].map(([l, n, c]) => (
-          <div key={String(l)} className="card p-5">
-            <p className={`text-3xl font-bold font-mono ${c}`}>{n}</p>
-            <p className="text-slate-600 text-sm mt-1">{l} policies</p>
-          </div>
-        ))}
-      </div>
-
-      {loading ? <div className="flex justify-center py-12"><div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>
-      : policies.length === 0 ? (
-        <div className="card p-16 text-center">
-          <Shield className="w-16 h-16 mx-auto mb-4 text-slate-400" />
-          <h3 className="text-lg font-semibold text-slate-900 mb-2">No policies yet</h3>
-          <p className="text-slate-600 mb-6">Create security policies or upload documents to define your standards and remediation rules.</p>
-          <button onClick={() => setShowCreate(true)} className="btn-primary"><Plus className="w-4 h-4" />Create First Policy</button>
-        </div>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {policies.map(p => (
-            <div key={p.id} className={`card p-5 cursor-pointer hover:border-slate-300 transition-all ${selected === p.id ? 'border-blue-500/30' : ''}`} onClick={() => setSelected(selected === p.id ? null : p.id)}>
-              <div className="flex items-start gap-3">
-                <FileText className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <h3 className="text-slate-900 font-medium">{p.title}</h3>
-                    <span className={`badge text-xs border ${sColor[p.status]}`}>{p.status}</span>
-                    {p.source_type && p.source_type !== 'manual' && <span className="badge text-xs bg-blue-50 text-blue-700 border border-blue-200">{p.source_type}</span>}
-                  </div>
-                  {p.description && <p className="text-slate-600 text-sm">{p.description}</p>}
-                  {selected === p.id && (
-                    <div className="mt-3 pt-3 border-t border-slate-200 animate-fade-in" onClick={e => e.stopPropagation()}>
-                      <pre className="text-slate-700 text-xs bg-slate-50 p-3 rounded overflow-x-auto whitespace-pre-wrap font-mono border border-slate-200 max-h-48">{p.content}</pre>
-                      <div className="flex gap-2 mt-3">
-                        {p.status === 'draft' && <button onClick={() => activate(p.id)} className="btn-primary text-xs"><CheckCircle className="w-3 h-3" />Activate</button>}
-                        {p.status === 'active' && <button onClick={() => archive(p.id)} className="btn-secondary text-xs"><Archive className="w-3 h-3" />Archive</button>}
-                        <button onClick={() => del(p.id)} className="btn-ghost text-red-600 text-xs"><Trash2 className="w-3 h-3" />Delete</button>
+      {loading ? <LoadingSpinner label="Loading policies..." /> : (
+        policies.length === 0 ? (
+          <EmptyState
+            icon={Shield}
+            title="No policies"
+            description="Create security policies to enforce standards across your codebase"
+            action={<button onClick={() => setShowCreate(true)} className="btn-primary"><Plus className="w-4 h-4" /> Create Policy</button>}
+          />
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {policies.map(p => (
+              <Card key={p.id} padding="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <FileText className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: 'var(--text-subtle)' }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <h3 className="text-sm font-medium" style={{ color: 'var(--text)' }}>{p.title}</h3>
+                        <StatusBadge status={p.status} />
+                        <span className={`badge badge-${p.severity}`}>{p.severity}</span>
+                      </div>
+                      {p.description && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{p.description}</p>}
+                      <div className="flex items-center gap-3 mt-2">
+                        <RelativeTime date={p.created_at} />
+                        {p.category && <span className="badge badge-neutral text-xs">{p.category}</span>}
                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
-                <p className="text-xs text-slate-500 flex-shrink-0">{new Date(p.created_at).toLocaleDateString()}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                  {p.status === 'draft' && <button onClick={() => activate(p.id)} className="btn-primary btn-sm"><CheckCircle2 className="w-3.5 h-3.5" /> Activate</button>}
+                  {p.status === 'active' && <button onClick={() => archive(p.id)} className="btn-secondary btn-sm"><Archive className="w-3.5 h-3.5" /> Archive</button>}
+                  <button onClick={() => del(p.id)} className="btn-ghost btn-sm" style={{ color: 'var(--critical-text)' }}><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )
       )}
 
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowCreate(false)}>
-          <div className="card p-6 w-full max-w-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-slate-900">Create Security Policy</h2>
-              <button onClick={() => setShowCreate(false)} className="text-slate-500"><X className="w-5 h-5" /></button>
+      <Modal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        title="Create Security Policy"
+        size="lg"
+        footer={<>
+          <button onClick={() => setShowCreate(false)} className="btn-secondary">Cancel</button>
+          <button onClick={create} disabled={!form.title.trim() || !form.content.trim() || saving} className="btn-primary">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Create
+          </button>
+        </>}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Title</label>
+              <input className="input" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="No Hardcoded Secrets" autoFocus />
             </div>
-            <form onSubmit={create} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="label">Title</label><input className="input" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="No Hardcoded Secrets" required autoFocus /></div>
-                <div><label className="label">Category</label><input className="input" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} placeholder="Secrets, Access Control" /></div>
-              </div>
-              <div><label className="label">Description</label><input className="input" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Brief summary" /></div>
-              <div><label className="label">Severity</label><select className="input max-w-xs" value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
-              <div><label className="label">Policy Content</label><textarea className="input font-mono text-sm" rows={8} value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} placeholder={`DENY: secrets in source code\nDENY: API keys in committed files\nALLOW: environment variables via secrets manager\n\nRATIONALE:\nHardcoded credentials expose services if source is leaked.`} required /></div>
-              {saving && <p className="text-xs text-blue-600">Creating and generating embeddings...</p>}
-              <div className="flex gap-3"><button type="button" onClick={() => setShowCreate(false)} className="btn-secondary flex-1">Cancel</button><button type="submit" disabled={saving} className="btn-primary flex-1 justify-center">{saving ? 'Creating...' : 'Create Policy'}</button></div>
-            </form>
+            <div>
+              <label className="label">Category</label>
+              <input className="input" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} placeholder="Secrets, Access Control" />
+            </div>
+          </div>
+          <div>
+            <label className="label">Description</label>
+            <input className="input" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Brief summary" />
+          </div>
+          <div>
+            <label className="label">Severity</label>
+            <select className="input max-w-xs" value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}>
+              {['critical','high','medium','low'].map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Policy Content</label>
+            <textarea className="input font-mono text-sm" rows={6} value={form.content} onChange={e => setForm({ ...form, content: e.target.value })}
+              placeholder="DENY: secrets in source code&#10;ALLOW: environment variables via secrets manager" />
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   )
 }

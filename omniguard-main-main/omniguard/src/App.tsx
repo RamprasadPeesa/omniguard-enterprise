@@ -1,6 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './hooks/useAuth'
+import { ThemeProvider } from './hooks/useTheme'
 import { Layout } from './components/Layout'
+import { LoadingSpinner } from './components/ui'
 import { Auth } from './pages/Auth'
 import { MarketingSite } from './pages/MarketingSite'
 import { Dashboard } from './pages/Dashboard'
@@ -16,30 +18,28 @@ import { Settings } from './pages/Settings'
 import { Organizations } from './pages/Organizations'
 import { Reports } from './pages/Reports'
 import { AttackSurface } from './pages/AttackSurface'
-import { Projects } from './pages/Projects'
 import { CloudAssets } from './pages/CloudAssets'
-import { SBOMInventory } from './pages/SBOMInventory'
 import { AICenter } from './pages/AICenter'
 import { KnowledgeBase } from './pages/KnowledgeBase'
-import { PolicyMarketplace } from './pages/PolicyMarketplace'
 import { IntegrationsPage } from './pages/IntegrationsPage'
 import { WebhooksPage } from './pages/WebhooksPage'
-import { AgentsPage } from './pages/AgentsPage'
-import { SBOMGeneration } from './pages/SBOMGeneration'
+import { APIKeysPage } from './pages/APIKeysPage'
+import { SecurityPosture } from './pages/SecurityPosture'
 
 function Guard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="w-12 h-12 border-4 border-slate-900 border-t-transparent rounded-full animate-spin" /></div>
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><LoadingSpinner size={32} /></div>
   if (!user) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
 function AppRoutes() {
   const { user, loading } = useAuth()
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="w-12 h-12 border-4 border-slate-900 border-t-transparent rounded-full animate-spin" /></div>
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><LoadingSpinner size={32} /></div>
 
   return (
     <Routes>
+      {/* Public routes */}
       <Route path="/" element={user ? <Navigate to="/app" replace /> : <MarketingSite page="home" />} />
       <Route path="/product" element={<MarketingSite page="product" />} />
       <Route path="/platform" element={<MarketingSite page="platform" />} />
@@ -56,51 +56,41 @@ function AppRoutes() {
       <Route path="/login" element={user ? <Navigate to="/app" replace /> : <Auth />} />
       <Route path="/signup" element={user ? <Navigate to="/app" replace /> : <Auth initialMode="signup" />} />
 
-      <Route path="/*" element={
-        <Guard>
-          <Layout>
-            <Routes>
-              <Route path="/app" element={<Dashboard />} />
-              <Route path="/" element={<Navigate to="/app" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/security-posture" element={<Dashboard />} />
-              <Route path="/attack-surface" element={<AttackSurface />} />
-              <Route path="/threat-insights" element={<Findings />} />
-              <Route path="/organizations" element={<Organizations />} />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/repositories" element={<Repositories />} />
-              <Route path="/cloud-assets" element={<CloudAssets />} />
-              <Route path="/sbom" element={<SBOMInventory />} />
-              <Route path="/findings" element={<Findings />} />
-              <Route path="/scans" element={<Scans />} />
-              <Route path="/policies" element={<Policies />} />
-              <Route path="/compliance" element={<Compliance />} />
-              <Route path="/risk-analysis" element={<Reports />} />
-              <Route path="/ai-center" element={<AICenter />} />
-              <Route path="/knowledge-base" element={<KnowledgeBase />} />
-              <Route path="/policy-marketplace" element={<PolicyMarketplace />} />
-              <Route path="/developers" element={<Teams />} />
-              <Route path="/teams" element={<Teams />} />
-              <Route path="/scorecards" element={<AuditLogs />} />
-              <Route path="/integrations" element={<IntegrationsPage />} />
-              <Route path="/webhooks" element={<WebhooksPage />} />
-              <Route path="/api-keys" element={<Settings />} />
-              <Route path="/agents" element={<AgentsPage />} />
-              <Route path="/audit-logs" element={<AuditLogs />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/billing" element={<Settings />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/notifications" element={<Notifications />} />
-              <Route path="/sbom-generation" element={<SBOMGeneration />} />
-              <Route path="*" element={<Navigate to="/app" replace />} />
-            </Routes>
-          </Layout>
-        </Guard>
-      } />
+      {/* Protected routes — each path maps to a UNIQUE page component */}
+      <Route path="/app" element={<Guard><Layout><Dashboard /></Layout></Guard>} />
+      <Route path="/app/security-posture" element={<Guard><Layout><SecurityPosture /></Layout></Guard>} />
+      <Route path="/app/attack-surface" element={<Guard><Layout><AttackSurface /></Layout></Guard>} />
+      <Route path="/app/organizations" element={<Guard><Layout><Organizations /></Layout></Guard>} />
+      <Route path="/app/repositories" element={<Guard><Layout><Repositories /></Layout></Guard>} />
+      <Route path="/app/cloud-assets" element={<Guard><Layout><CloudAssets /></Layout></Guard>} />
+      <Route path="/app/findings" element={<Guard><Layout><Findings /></Layout></Guard>} />
+      <Route path="/app/scans" element={<Guard><Layout><Scans /></Layout></Guard>} />
+      <Route path="/app/policies" element={<Guard><Layout><Policies /></Layout></Guard>} />
+      <Route path="/app/compliance" element={<Guard><Layout><Compliance /></Layout></Guard>} />
+      <Route path="/app/ai-center" element={<Guard><Layout><AICenter /></Layout></Guard>} />
+      <Route path="/app/knowledge-base" element={<Guard><Layout><KnowledgeBase /></Layout></Guard>} />
+      <Route path="/app/teams" element={<Guard><Layout><Teams /></Layout></Guard>} />
+      <Route path="/app/integrations" element={<Guard><Layout><IntegrationsPage /></Layout></Guard>} />
+      <Route path="/app/webhooks" element={<Guard><Layout><WebhooksPage /></Layout></Guard>} />
+      <Route path="/app/api-keys" element={<Guard><Layout><APIKeysPage /></Layout></Guard>} />
+      <Route path="/app/audit-logs" element={<Guard><Layout><AuditLogs /></Layout></Guard>} />
+      <Route path="/app/reports" element={<Guard><Layout><Reports /></Layout></Guard>} />
+      <Route path="/app/notifications" element={<Guard><Layout><Notifications /></Layout></Guard>} />
+      <Route path="/app/settings" element={<Guard><Layout><Settings /></Layout></Guard>} />
+
+      <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>
   )
 }
 
 export default function App() {
-  return <BrowserRouter><AuthProvider><AppRoutes /></AuthProvider></BrowserRouter>
+  return (
+    <BrowserRouter>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </ThemeProvider>
+    </BrowserRouter>
+  )
 }

@@ -9,7 +9,6 @@ type Finding = Tables<'findings'>
 const API = import.meta.env.VITE_SUPABASE_URL + '/functions/v1'
 
 // ── Repositories ──────────────────────────────────────────────
-
 export function useRepositories(organizationId: string | null) {
   const { user } = useAuth()
   const [repositories, setRepositories] = useState<Repository[]>([])
@@ -62,32 +61,7 @@ export function useRepositories(organizationId: string | null) {
   return { repositories, loading, error, connect, triggerScan, remove, refetch: fetch_ }
 }
 
-// ── Scans (per-repo) ──────────────────────────────────────────
-
-export function useScans(repositoryId: string | null) {
-  const [scans, setScans] = useState<Scan[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    if (!repositoryId) { setScans([]); setLoading(false); return }
-    supabase.from('scans').select('*').eq('repository_id', repositoryId)
-      .order('created_at', { ascending: false }).limit(50)
-      .then(({ data }) => { setScans(data || []); setLoading(false) })
-
-    const ch = supabase.channel(`scans:${repositoryId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'scans', filter: `repository_id=eq.${repositoryId}` },
-        p => {
-          if (p.eventType === 'INSERT') setScans(prev => [p.new as Scan, ...prev])
-          else if (p.eventType === 'UPDATE') setScans(prev => prev.map(s => s.id === (p.new as Scan).id ? p.new as Scan : s))
-        }).subscribe()
-    return () => { supabase.removeChannel(ch) }
-  }, [repositoryId])
-
-  return { scans, loading }
-}
-
-// ── All scans (org-wide) ──────────────────────────────────────
-
+// ── Scans (org-wide) ──────────────────────────────────────────
 export function useAllScans(organizationId: string | null) {
   const [scans, setScans] = useState<Array<Scan & { repository_name?: string }>>([])
   const [loading, setLoading] = useState(true)
@@ -114,7 +88,6 @@ export function useAllScans(organizationId: string | null) {
 }
 
 // ── Findings ──────────────────────────────────────────────────
-
 export function useFindings(
   organizationId: string | null,
   filters?: { repositoryId?: string; severity?: string; status?: string; scanner?: string }
@@ -178,7 +151,6 @@ export function useFindings(
 }
 
 // ── Notifications ─────────────────────────────────────────────
-
 export function useNotifications(userId: string | null) {
   const [notifications, setNotifications] = useState<Tables<'notifications'>[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -193,10 +165,8 @@ export function useNotifications(userId: string | null) {
 
     const ch = supabase.channel(`notifs:${userId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-        p => {
-          setNotifications(prev => [p.new as Tables<'notifications'>, ...prev])
-          setUnreadCount(c => c + 1)
-        }).subscribe()
+        p => { setNotifications(prev => [p.new as Tables<'notifications'>, ...prev]); setUnreadCount(c => c + 1) })
+      .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [userId])
 
@@ -211,7 +181,6 @@ export function useNotifications(userId: string | null) {
 }
 
 // ── Dashboard stats ───────────────────────────────────────────
-
 export function useDashboardStats(organizationId: string | null) {
   const [stats, setStats] = useState({ critical: 0, high: 0, medium: 0, low: 0, total: 0, resolved: 0, repos: 0, avgRisk: 0 })
   const [loading, setLoading] = useState(true)

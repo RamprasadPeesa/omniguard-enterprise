@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useRepositories } from '../hooks/useRepositories'
-import { GitBranch, Plus, Play, Trash2, RefreshCw, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, X } from 'lucide-react'
+import { PageHeader, Card, EmptyState, LoadingSpinner, Modal, RelativeTime, SeverityBadge } from '../components/ui'
+import { GitBranch, Plus, Play, Trash2, RefreshCw, X, Loader as Loader2 } from 'lucide-react'
 
 export function Repositories() {
   const { currentOrganizationId } = useAuth()
@@ -10,11 +11,11 @@ export function Repositories() {
   const [form, setForm] = useState({ provider: 'github', owner: '', name: '' })
   const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState<string | null>(null)
-  const [scanTypes, setScanTypes] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
 
   const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault(); setError('')
+    e.preventDefault()
+    setError('')
     if (!form.owner.trim() || !form.name.trim()) { setError('Owner and name required'); return }
     setSaving(true)
     const full_name = `${form.owner.trim()}/${form.name.trim()}`
@@ -26,115 +27,104 @@ export function Repositories() {
 
   const handleScan = async (id: string) => {
     setScanning(id)
-    await triggerScan(id, scanTypes[id] || 'full')
+    await triggerScan(id, 'full')
     setScanning(null)
   }
 
-  const riskColor = (score: number) => score >= 70 ? 'text-red-400' : score >= 40 ? 'text-orange-400' : score >= 20 ? 'text-yellow-400' : 'text-green-400'
+  const riskColor = (score: number) =>
+    score >= 70 ? 'var(--critical-text)' : score >= 40 ? 'var(--warning-text)' : score >= 20 ? 'var(--medium-text)' : 'var(--success-text)'
 
   return (
-    <div className="p-8 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Repositories</h1>
-          <p className="text-slate-400 mt-1">{repositories.length} connected</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={refetch} className="btn-secondary"><RefreshCw className="w-4 h-4" /></button>
-          <button onClick={() => setShowAdd(true)} className="btn-primary"><Plus className="w-4 h-4" />Connect Repository</button>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center py-16"><div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>
-      ) : repositories.length === 0 ? (
-        <div className="card p-16 text-center">
-          <GitBranch className="w-16 h-16 mx-auto mb-4 text-slate-600" />
-          <h3 className="text-xl font-semibold text-slate-300 mb-2">No repositories connected</h3>
-          <p className="text-slate-500 mb-6">Connect a GitHub, GitLab, or Bitbucket repository to start scanning.</p>
-          <button onClick={() => setShowAdd(true)} className="btn-primary"><Plus className="w-4 h-4" />Connect First Repository</button>
-        </div>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {repositories.map(repo => (
-            <div key={repo.id} className="card p-5 hover:border-slate-600 transition-all">
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <GitBranch className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                    <h3 className="text-slate-100 font-medium font-mono text-sm truncate">{repo.full_name}</h3>
-                    <span className="badge" style={{ background: '#1e293b', color: '#94a3b8' }}>{repo.provider}</span>
-                    <span className="badge" style={{ background: '#1e293b', color: '#94a3b8' }}>{repo.visibility}</span>
-                  </div>
-                  {repo.description && <p className="text-xs text-slate-500 mb-2 line-clamp-1">{repo.description}</p>}
-                  <div className="flex items-center gap-3 text-xs text-slate-500">
-                    <span>branch: {repo.default_branch}</span>
-                    {repo.language && <span>{repo.language}</span>}
-                    {repo.last_scan_at && <span>Last scan: {new Date(repo.last_scan_at).toLocaleDateString()}</span>}
-                  </div>
-                </div>
-                <div className="text-right ml-3 flex-shrink-0">
-                  <div className={`text-2xl font-bold font-mono ${riskColor(repo.risk_score)}`}>{Math.round(repo.risk_score)}</div>
-                  <div className="text-xs text-slate-600">risk</div>
-                </div>
-              </div>
-              <div className="flex gap-2 mt-4">
-                <select value={scanTypes[repo.id] || 'full'} onChange={e => setScanTypes(prev => ({ ...prev, [repo.id]: e.target.value }))} className="input text-xs max-w-40">
-                  <option value="full">Full</option>
-                  <option value="incremental">Incremental</option>
-                  <option value="secrets">Secrets</option>
-                  <option value="dependencies">Dependencies</option>
-                  <option value="sast">SAST</option>
-                  <option value="iac">IaC</option>
-                  <option value="container">Container</option>
-                  <option value="policy">Policy</option>
-                </select>
-                <button onClick={() => handleScan(repo.id)} disabled={scanning === repo.id} className="btn-primary text-xs flex-1 justify-center">
-                  {scanning === repo.id ? <><RefreshCw className="w-3 h-3 animate-spin" />Scanning…</> : <><Play className="w-3 h-3" />Scan</>}
-                </button>
-                <button onClick={() => remove(repo.id)} className="btn-ghost text-red-400 text-xs p-2">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {showAdd && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowAdd(false)}>
-          <div className="card-elevated p-6 w-full max-w-md animate-slide-up" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-xl font-semibold text-white">Connect Repository</h2>
-              <button onClick={() => setShowAdd(false)} className="text-slate-500 hover:text-slate-300"><X className="w-5 h-5" /></button>
-            </div>
-            <form onSubmit={handleAdd} className="space-y-4">
-              <div>
-                <label className="label">Provider</label>
-                <select value={form.provider} onChange={e => setForm({ ...form, provider: e.target.value })} className="input">
-                  <option value="github">GitHub</option>
-                  <option value="gitlab">GitLab</option>
-                  <option value="bitbucket">Bitbucket</option>
-                  <option value="azure-devops">Azure DevOps</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">Owner (username or org)</label>
-                <input className="input" value={form.owner} onChange={e => setForm({ ...form, owner: e.target.value })} placeholder="e.g. your-company" required />
-              </div>
-              <div>
-                <label className="label">Repository Name</label>
-                <input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. api-service" required />
-              </div>
-              {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">{error}</div>}
-              <div className="flex gap-3">
-                <button type="button" onClick={() => setShowAdd(false)} className="btn-secondary flex-1">Cancel</button>
-                <button type="submit" disabled={saving} className="btn-primary flex-1 justify-center">{saving ? 'Connecting…' : 'Connect'}</button>
-              </div>
-            </form>
+    <div className="p-8 animate-fade-in">
+      <PageHeader
+        title="Repositories"
+        description={`${repositories.length} connected · scan for secrets, SAST, IaC, and dependencies`}
+        actions={
+          <div className="flex gap-2">
+            <button onClick={refetch} className="btn-secondary"><RefreshCw className="w-4 h-4" /></button>
+            <button onClick={() => setShowAdd(true)} className="btn-primary"><Plus className="w-4 h-4" /> Connect Repository</button>
           </div>
-        </div>
+        }
+      />
+
+      {loading ? <LoadingSpinner label="Loading repositories..." /> : (
+        repositories.length === 0 ? (
+          <EmptyState
+            icon={GitBranch}
+            title="No repositories connected"
+            description="Connect a GitHub, GitLab, or Bitbucket repository to start scanning"
+            action={<button onClick={() => setShowAdd(true)} className="btn-primary"><Plus className="w-4 h-4" /> Connect First Repository</button>}
+          />
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {repositories.map(repo => (
+              <Card key={repo.id} padding="p-5">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <GitBranch className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--text-subtle)' }} />
+                      <h3 className="text-sm font-mono font-medium truncate" style={{ color: 'var(--text)' }}>{repo.full_name}</h3>
+                    </div>
+                    {repo.description && <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{repo.description}</p>}
+                    <div className="flex items-center gap-3 mt-2 text-xs" style={{ color: 'var(--text-subtle)' }}>
+                      <span className="badge badge-neutral">{repo.provider}</span>
+                      <span className="badge badge-neutral">{repo.visibility}</span>
+                      {repo.language && <span>{repo.language}</span>}
+                      {repo.last_scan_at && <RelativeTime date={repo.last_scan_at} />}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-2xl font-bold font-mono" style={{ color: riskColor(repo.risk_score) }}>{Math.round(repo.risk_score)}</div>
+                    <div className="text-xs" style={{ color: 'var(--text-subtle)' }}>risk</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                  <button onClick={() => handleScan(repo.id)} disabled={scanning === repo.id} className="btn-primary btn-sm flex-1 justify-center">
+                    {scanning === repo.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                    {scanning === repo.id ? 'Scanning...' : 'Scan Now'}
+                  </button>
+                  <button onClick={() => remove(repo.id)} className="btn-ghost btn-sm" style={{ color: 'var(--critical-text)' }}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )
       )}
+
+      <Modal
+        open={showAdd}
+        onClose={() => setShowAdd(false)}
+        title="Connect Repository"
+        footer={<>
+          <button onClick={() => setShowAdd(false)} className="btn-secondary">Cancel</button>
+          <button onClick={handleAdd} disabled={!form.owner.trim() || !form.name.trim() || saving} className="btn-primary">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Connect
+          </button>
+        </>}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="label">Provider</label>
+            <select className="input" value={form.provider} onChange={e => setForm({ ...form, provider: e.target.value })}>
+              <option value="github">GitHub</option>
+              <option value="gitlab">GitLab</option>
+              <option value="bitbucket">Bitbucket</option>
+              <option value="azure-devops">Azure DevOps</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">Owner (username or org)</label>
+            <input className="input" value={form.owner} onChange={e => setForm({ ...form, owner: e.target.value })} placeholder="e.g. your-company" autoFocus />
+          </div>
+          <div>
+            <label className="label">Repository Name</label>
+            <input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. api-service" />
+          </div>
+          {error && <p className="text-sm" style={{ color: 'var(--critical-text)' }}>{error}</p>}
+        </div>
+      </Modal>
     </div>
   )
 }

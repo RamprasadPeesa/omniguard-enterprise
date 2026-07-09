@@ -1,144 +1,99 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useTheme } from '../hooks/useTheme'
 import { useNotifications } from '../hooks/useRepositories'
-import { Shield, LayoutDashboard, GitBranch, TriangleAlert, Play, ClipboardList, ShieldCheck, Users, FileText, Settings, LogOut, Bell, X, ChevronDown, ChevronRight, Search, Building2, Projector as Projects, Server, Lock, Key, Globe, Activity, ChartBar as BarChart3, Cloud, Code, Package, Layers, Brain, BookOpen, CreditCard, UserCog, Puzzle, Zap, ExternalLink, Command, Menu, Moon, Sun, Circle as HelpCircle, Briefcase, Target, CircleAlert as AlertCircle, TrendingUp, BadgeCheck } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { Shield, LayoutDashboard, GitBranch, TriangleAlert as AlertTriangle, Play, FileText, Settings, LogOut, Bell, X, ChevronDown, ChevronRight, Search, Building2, Users, Key, BookOpen, Command, Menu, Moon, Sun, Cloud, Cpu, Webhook, Activity, ChartBar as BarChart3, Target, Crown, CircleCheck as CheckCircle2 } from 'lucide-react'
+
+interface NavItem {
+  to: string
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>
+  label: string
+  badge?: string
+}
 
 interface NavGroup {
   label: string
   items: NavItem[]
 }
 
-interface NavItem {
-  to: string
-  icon: any
-  label: string
-  badge?: string | number
-  badgeColor?: string
-  exact?: boolean
-  children?: NavItem[]
-}
-
+// Each link points to a UNIQUE page component — no redirects, no duplicates.
 const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Overview',
     items: [
-      { to: '/', icon: LayoutDashboard, label: 'Dashboard', exact: true },
-      { to: '/security-posture', icon: Shield, label: 'Security Posture' },
-      { to: '/attack-surface', icon: Target, label: 'Attack Surface' },
-      { to: '/threat-insights', icon: AlertCircle, label: 'Threat Insights', badge: 'New', badgeColor: 'bg-blue-500' },
-    ]
+      { to: '/app', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/app/security-posture', icon: Shield, label: 'Security Posture' },
+      { to: '/app/attack-surface', icon: Target, label: 'Attack Surface' },
+    ],
   },
   {
     label: 'Assets',
     items: [
-      { to: '/organizations', icon: Building2, label: 'Organizations' },
-      { to: '/projects', icon: Projects, label: 'Projects' },
-      { to: '/repositories', icon: GitBranch, label: 'Repositories' },
-      { to: '/cloud-assets', icon: Cloud, label: 'Cloud Assets' },
-      { to: '/sbom', icon: Package, label: 'SBOM Inventory' },
-    ]
+      { to: '/app/organizations', icon: Building2, label: 'Organizations' },
+      { to: '/app/repositories', icon: GitBranch, label: 'Repositories' },
+      { to: '/app/cloud-assets', icon: Cloud, label: 'Cloud Assets' },
+    ],
   },
   {
     label: 'Security',
     items: [
-      { to: '/findings', icon: TriangleAlert, label: 'Findings' },
-      { to: '/scans', icon: Play, label: 'Scans' },
-      { to: '/policies', icon: ClipboardList, label: 'Policies' },
-      { to: '/compliance', icon: ShieldCheck, label: 'Compliance' },
-      { to: '/risk-analysis', icon: TrendingUp, label: 'Risk Analysis' },
-    ]
+      { to: '/app/findings', icon: AlertTriangle, label: 'Findings' },
+      { to: '/app/scans', icon: Play, label: 'Scans' },
+      { to: '/app/policies', icon: FileText, label: 'Policies' },
+      { to: '/app/compliance', icon: Shield, label: 'Compliance' },
+    ],
   },
   {
-    label: 'AI Center',
+    label: 'Intelligence',
     items: [
-      { to: '/ai-center', icon: Brain, label: 'AI Analysis' },
-      { to: '/knowledge-base', icon: BookOpen, label: 'Knowledge Base' },
-      { to: '/policy-marketplace', icon: Puzzle, label: 'Policy Marketplace', badge: 'Beta', badgeColor: 'bg-purple-500' },
-    ]
+      { to: '/app/ai-center', icon: Cpu, label: 'AI Center' },
+      { to: '/app/knowledge-base', icon: BookOpen, label: 'Knowledge Base' },
+    ],
   },
   {
     label: 'Team',
     items: [
-      { to: '/developers', icon: Code, label: 'Developers' },
-      { to: '/teams', icon: Users, label: 'Teams' },
-      { to: '/scorecards', icon: BadgeCheck, label: 'Developer Scorecards' },
-    ]
+      { to: '/app/teams', icon: Users, label: 'Teams' },
+    ],
   },
   {
     label: 'Integrations',
     items: [
-      { to: '/integrations', icon: Layers, label: 'Integrations' },
-      { to: '/webhooks', icon: Zap, label: 'Webhooks' },
-      { to: '/api-keys', icon: Key, label: 'API Keys' },
-      { to: '/agents', icon: Server, label: 'Agents' },
-    ]
+      { to: '/app/integrations', icon: Cloud, label: 'Integrations' },
+      { to: '/app/webhooks', icon: Webhook, label: 'Webhooks' },
+      { to: '/app/api-keys', icon: Key, label: 'API Keys' },
+    ],
   },
   {
     label: 'Administration',
     items: [
-      { to: '/audit-logs', icon: FileText, label: 'Audit Logs' },
-      { to: '/reports', icon: BarChart3, label: 'Reports' },
-      { to: '/notifications', icon: Bell, label: 'Notifications' },
-      { to: '/billing', icon: CreditCard, label: 'Billing' },
-      { to: '/settings', icon: Settings, label: 'Settings' },
-    ]
+      { to: '/app/audit-logs', icon: Activity, label: 'Audit Logs' },
+      { to: '/app/reports', icon: BarChart3, label: 'Reports' },
+      { to: '/app/notifications', icon: Bell, label: 'Notifications' },
+      { to: '/app/settings', icon: Settings, label: 'Settings' },
+    ],
   },
 ]
 
-function CollapsibleGroup({ label, items, defaultExpanded }: { label: string; items: NavItem[]; defaultExpanded?: boolean }) {
-  const [expanded, setExpanded] = useState(defaultExpanded ?? true)
+function NavItem({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const location = useLocation()
-
-  // Auto-expand if any child is active
-  useEffect(() => {
-    const isActive = items.some(item => {
-      if (item.exact) return location.pathname === item.to
-      return location.pathname.startsWith(item.to)
-    })
-    if (isActive) setExpanded(true)
-  }, [location.pathname, items])
-
-  return (
-    <div className="mb-1">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-400 transition-colors"
-      >
-        <span>{label}</span>
-        {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-      </button>
-      {expanded && (
-        <nav className="space-y-0.5">
-          {items.map((item) => (
-            <NavItem key={item.to} item={item} />
-          ))}
-        </nav>
-      )}
-    </div>
-  )
-}
-
-function NavItem({ item }: { item: NavItem }) {
-  const location = useLocation()
-  const isActive = item.exact
-    ? location.pathname === item.to
-    : location.pathname.startsWith(item.to) && item.to !== '/'
+  const isActive = item.to === '/app'
+    ? location.pathname === '/app'
+    : location.pathname === item.to || location.pathname.startsWith(item.to + '/')
 
   return (
     <NavLink
       to={item.to}
-      end={item.exact}
-      className={({ isActive }) =>
-        `sidebar-link ${isActive ? 'sidebar-link-active' : ''}`
-      }
+      end={item.to === '/app'}
+      className={`sidebar-link ${isActive ? 'sidebar-link-active' : ''}`}
+      title={collapsed ? item.label : undefined}
     >
       <item.icon className="w-4 h-4 flex-shrink-0" />
-      <span className="flex-1 truncate">{item.label}</span>
-      {item.badge && (
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.badgeColor || 'bg-slate-600'} text-white`}>
-          {item.badge}
-        </span>
+      {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+      {!collapsed && item.badge && (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded badge badge-info">{item.badge}</span>
       )}
     </NavLink>
   )
@@ -147,73 +102,41 @@ function NavItem({ item }: { item: NavItem }) {
 function SearchModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [query, setQuery] = useState('')
   const navigate = useNavigate()
-
   const allItems = NAV_GROUPS.flatMap(g => g.items)
   const filtered = query
-    ? allItems.filter(item => item.label.toLowerCase().includes(query.toLowerCase()))
-    : allItems.slice(0, 6)
+    ? allItems.filter(i => i.label.toLowerCase().includes(query.toLowerCase()))
+    : allItems.slice(0, 8)
 
-  useEffect(() => {
-    if (open) setQuery('')
-  }, [open])
-
+  useEffect(() => { if (open) setQuery('') }, [open])
   if (!open) return null
 
   return (
     <div className="fixed inset-0 z-[100] flex items-start justify-center pt-24 px-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div
-        className="relative w-full max-w-xl bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-3 p-4 border-b border-slate-700">
-          <Search className="w-5 h-5 text-slate-500" />
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }} />
+      <div className="relative w-full max-w-lg card-elevated overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-3 p-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <Search className="w-5 h-5" style={{ color: 'var(--text-subtle)' }} />
           <input
-            type="text"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Search commands, pages, settings..."
-            className="flex-1 bg-transparent text-white text-lg outline-none placeholder:text-slate-500"
-            autoFocus
+            type="text" value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Search pages..."
+            className="flex-1 bg-transparent text-base outline-none"
+            style={{ color: 'var(--text)' }} autoFocus
           />
-          <kbd className="hidden md:inline-flex items-center gap-1 px-2 py-1 text-xs text-slate-500 bg-slate-900 rounded">
-            <Command className="w-3 h-3" />K
+          <kbd className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'var(--surface-2)', color: 'var(--text-subtle)' }}>
+            <Command className="w-3 h-3 inline" />K
           </kbd>
         </div>
-        <div className="max-h-80 overflow-y-auto">
+        <div className="max-h-80 overflow-y-auto scrollbar p-2">
           {filtered.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">
-              <Search className="w-8 h-8 mx-auto mb-2" />
-              <p>No results found</p>
-            </div>
-          ) : (
-            <div className="p-2">
-              {filtered.map((item) => (
-                <button
-                  key={item.to}
-                  onClick={() => {
-                    navigate(item.to)
-                    onClose()
-                  }}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-700/50 transition-colors text-left"
-                >
-                  <item.icon className="w-5 h-5 text-slate-400" />
-                  <span className="text-slate-200">{item.label}</span>
-                  {item.badge && (
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.badgeColor || 'bg-slate-600'} text-white`}>
-                      {item.badge}
-                    </span>
-                  )}
-                  <ChevronRight className="w-4 h-4 text-slate-600 ml-auto" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="p-3 border-t border-slate-700 flex items-center gap-4 text-xs text-slate-500">
-          <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-slate-900 rounded">↑</kbd><kbd className="px-1.5 py-0.5 bg-slate-900 rounded">↓</kbd> Navigate</span>
-          <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-slate-900 rounded">Enter</kbd> Select</span>
-          <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-slate-900 rounded">Esc</kbd> Close</span>
+            <div className="p-6 text-center text-sm" style={{ color: 'var(--text-subtle)' }}>No results</div>
+          ) : filtered.map(item => (
+            <button key={item.to} onClick={() => { navigate(item.to); onClose() }}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors hover:bg-[var(--surface-2)]">
+              <item.icon className="w-4 h-4" style={{ color: 'var(--text-subtle)' }} />
+              <span className="text-sm" style={{ color: 'var(--text)' }}>{item.label}</span>
+              <ChevronRight className="w-4 h-4 ml-auto" style={{ color: 'var(--text-subtle)' }} />
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -222,118 +145,89 @@ function SearchModal({ open, onClose }: { open: boolean; onClose: () => void }) 
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, profile, memberships, currentOrganizationId, setCurrentOrganizationId, signOut } = useAuth()
+  const { theme, toggle } = useTheme()
   const { notifications, unreadCount, markAllRead } = useNotifications(user?.id || null)
   const [showNotifs, setShowNotifs] = useState(false)
   const [showOrgMenu, setShowOrgMenu] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [orgNames, setOrgNames] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!memberships.length) return
-    import('../lib/supabase').then(({ supabase }) => {
-      const ids = memberships.map(m => m.organization_id)
-      supabase.from('organizations').select('id,name').in('id', ids)
-        .then(({ data }) => {
-          if (data) setOrgNames(Object.fromEntries(data.map(o => [o.id, o.name])))
-        })
-    })
+    supabase.from('organizations').select('id,name').in('id', memberships.map(m => m.organization_id))
+      .then(({ data }) => { if (data) setOrgNames(Object.fromEntries(data.map(o => [o.id, o.name]))) })
   }, [memberships])
 
-  const orgs = memberships.map(m => ({ id: m.organization_id, name: orgNames[m.organization_id] || m.organization_id.slice(0, 12) + '…', role: m.role }))
-  const displayName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email : user?.email || ''
-  const initials = displayName.split(' ').map((name: string) => name[0] || '').join('').toUpperCase().slice(0, 2) || 'U'
-
-  // Keyboard shortcut for search
+  // Close menus on route change
   useEffect(() => {
-    const handleKeydown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        setShowSearch(true)
-      }
-      if (e.key === 'Escape') {
-        setShowSearch(false)
-        setShowNotifs(false)
-        setShowOrgMenu(false)
-        setShowUserMenu(false)
-      }
+    setShowNotifs(false); setShowOrgMenu(false); setShowUserMenu(false); setMobileOpen(false)
+  }, [location.pathname])
+
+  // Keyboard shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setShowSearch(true) }
+      if (e.key === 'Escape') { setShowSearch(false); setShowNotifs(false); setShowOrgMenu(false); setShowUserMenu(false) }
     }
-    window.addEventListener('keydown', handleKeydown)
-    return () => window.removeEventListener('keydown', handleKeydown)
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
   }, [])
 
+  const orgs = memberships.map(m => ({ id: m.organization_id, name: orgNames[m.organization_id] || 'Organization', role: m.role }))
+  const activeOrg = orgs.find(o => o.id === currentOrganizationId)
+  const displayName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email : user?.email || 'User'
+  const initials = displayName.split(' ').map(n => n[0] || '').join('').toUpperCase().slice(0, 2) || 'U'
+
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900">
-      {/* Mobile Menu Overlay */}
-      {mobileMenuOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
+    <div className="flex min-h-screen" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
+      {mobileOpen && <div className="fixed inset-0 z-40 lg:hidden" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={() => setMobileOpen(false)} />}
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-white border-r border-slate-200 transition-all duration-300 ${
-          sidebarCollapsed ? 'w-16' : 'w-60'
-        } ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col transition-all duration-200 ${collapsed ? 'w-16' : 'w-60'} ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+        style={{ background: 'var(--surface)', borderRight: '1px solid var(--border)' }}
       >
-        {/* Logo Header */}
-        <div className="flex items-center gap-2 px-4 h-14 border-b border-slate-200">
-          <Shield className="w-7 h-7 text-blue-500 flex-shrink-0" />
-          {!sidebarCollapsed && (
-            <span className="text-slate-900 font-bold text-lg tracking-tight">OmniGuard</span>
-          )}
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="hidden lg:flex ml-auto p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors"
-          >
+        {/* Logo */}
+        <div className="flex items-center gap-2 h-14 px-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <Shield className="w-6 h-6 flex-shrink-0" style={{ color: 'var(--accent)' }} />
+          {!collapsed && <span className="font-semibold text-base tracking-tight" style={{ color: 'var(--text)' }}>OmniGuard</span>}
+          <button onClick={() => setCollapsed(!collapsed)} className="hidden lg:block ml-auto p-1 rounded hover:bg-[var(--surface-2)]" style={{ color: 'var(--text-muted)' }}>
             <Menu className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Organization Switcher */}
-        {!sidebarCollapsed && orgs.length > 1 && (
-          <div className="px-3 py-2 border-b border-[#1e293b]">
+        {/* Org Switcher */}
+        {!collapsed && orgs.length > 0 && (
+          <div className="px-3 py-2 border-b" style={{ borderColor: 'var(--border)' }}>
             <div className="relative">
-              <button
-                onClick={() => setShowOrgMenu(!showOrgMenu)}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-left transition-colors"
-              >
-                <Building2 className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              <button onClick={() => setShowOrgMenu(!showOrgMenu)}
+                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-left transition-colors hover:bg-[var(--surface-2)]"
+                style={{ border: '1px solid var(--border)' }}>
+                <Building2 className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--text-subtle)' }} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs text-slate-500">Organization</div>
-                  <div className="text-sm text-slate-200 truncate">
-                    {currentOrganizationId ? (orgNames[currentOrganizationId] || currentOrganizationId.slice(0, 12) + '…') : 'Select org'}
-                  </div>
+                  <div className="text-[11px]" style={{ color: 'var(--text-subtle)' }}>Organization</div>
+                  <div className="text-sm truncate" style={{ color: 'var(--text)' }}>{activeOrg?.name || 'Select'}</div>
                 </div>
-                <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${showOrgMenu ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 transition-transform ${showOrgMenu ? 'rotate-180' : ''}`} style={{ color: 'var(--text-subtle)' }} />
               </button>
               {showOrgMenu && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 overflow-hidden">
+                <div className="absolute top-full left-0 right-0 mt-1 card-elevated overflow-hidden z-50">
                   {orgs.map(o => (
-                    <button
-                      key={o.id}
-                      onClick={() => {
-                        setCurrentOrganizationId(o.id)
-                        setShowOrgMenu(false)
-                      }}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-700/50 transition-colors ${
-                        currentOrganizationId === o.id ? 'bg-blue-500/10 text-blue-400' : 'text-slate-300'
-                      }`}
-                    >
+                    <button key={o.id} onClick={() => { setCurrentOrganizationId(o.id); setShowOrgMenu(false) }}
+                      className="w-full flex items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-[var(--surface-2)]"
+                      style={{ color: currentOrganizationId === o.id ? 'var(--accent)' : 'var(--text)' }}>
                       <Building2 className="w-4 h-4" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm truncate">{o.id.slice(0, 12)}...</div>
-                        <div className="text-xs text-slate-500 capitalize">{o.role}</div>
+                        <div className="text-sm truncate">{o.name}</div>
+                        <div className="text-xs capitalize" style={{ color: 'var(--text-subtle)' }}>{o.role}</div>
                       </div>
-                      {currentOrganizationId === o.id && (
-                        <BadgeCheck className="w-4 h-4 text-blue-400" />
-                      )}
+                      {currentOrganizationId === o.id && <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--accent)' }} />}
                     </button>
                   ))}
                 </div>
@@ -342,207 +236,126 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Navigation */}
-        <div className="flex-1 overflow-y-auto py-2">
-          {NAV_GROUPS.map((group, i) => (
-            <CollapsibleGroup
-              key={group.label}
-              label={group.label}
-              items={group.items}
-              defaultExpanded={i < 3}
-            />
+        {/* Nav */}
+        <nav className="flex-1 overflow-y-auto scrollbar py-2">
+          {NAV_GROUPS.map(group => (
+            <div key={group.label} className="mb-1">
+              {!collapsed && (
+                <div className="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-subtle)' }}>{group.label}</div>
+              )}
+              {group.items.map(item => <NavItem key={item.to} item={item} collapsed={collapsed} />)}
+            </div>
           ))}
-        </div>
+        </nav>
 
-        {/* User Section */}
-        <div className="border-t border-[#1e293b] p-3">
-          {!sidebarCollapsed ? (
+        {/* User */}
+        <div className="border-t p-2" style={{ borderColor: 'var(--border)' }}>
+          {!collapsed ? (
             <div className="relative">
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-800/50 transition-colors"
-              >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold">
-                  {initials}
-                </div>
+              <button onClick={() => setShowUserMenu(!showUserMenu)}
+                className="w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors hover:bg-[var(--surface-2)]">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold"
+                  style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}>{initials}</div>
                 <div className="flex-1 min-w-0 text-left">
-                  <div className="text-sm text-slate-200 truncate">{displayName}</div>
-                  <div className="text-xs text-slate-500 truncate">{user?.email}</div>
+                  <div className="text-sm truncate" style={{ color: 'var(--text)' }}>{displayName}</div>
+                  <div className="text-xs truncate" style={{ color: 'var(--text-subtle)' }}>{user?.email}</div>
                 </div>
-                <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} style={{ color: 'var(--text-subtle)' }} />
               </button>
               {showUserMenu && (
-                <div className="absolute bottom-full left-0 right-0 mb-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
-                  <NavLink
-                    to="/settings"
-                    onClick={() => setShowUserMenu(false)}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700/50 transition-colors"
-                  >
-                    <UserCog className="w-4 h-4" />
-                    Account Settings
+                <div className="absolute bottom-full left-0 right-0 mb-1 card-elevated overflow-hidden z-50">
+                  <NavLink to="/app/settings" onClick={() => setShowUserMenu(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-[var(--surface-2)]" style={{ color: 'var(--text)' }}>
+                    <Settings className="w-4 h-4" /> Settings
                   </NavLink>
-                  <button
-              onClick={() => { signOut().then(() => navigate('/login')) }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-slate-700/50 transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Sign out
+                  <button onClick={() => signOut().then(() => navigate('/login'))}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-[var(--surface-2)]" style={{ color: 'var(--critical-text)' }}>
+                    <LogOut className="w-4 h-4" /> Sign out
                   </button>
                 </div>
               )}
             </div>
           ) : (
-            <button
-              onClick={() => setSidebarCollapsed(false)}
-              className="w-8 h-8 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold"
-            >
-              {initials}
-            </button>
+            <button onClick={() => setCollapsed(false)}
+              className="w-8 h-8 mx-auto rounded-full flex items-center justify-center text-xs font-semibold"
+              style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}>{initials}</button>
           )}
         </div>
       </aside>
 
-      {/* Main Content */}
-      <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-60'}`}>
-        {/* Top Bar */}
-        <header className="sticky top-0 z-40 flex items-center justify-between gap-4 px-4 md:px-6 h-14 border-b border-slate-200 bg-white/90 backdrop-blur-sm">
-          {/* Mobile Menu Button */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
-          >
+      {/* Main */}
+      <div className={`flex-1 flex flex-col min-h-screen transition-all duration-200 ${collapsed ? 'lg:ml-16' : 'lg:ml-60'}`}>
+        {/* Top bar */}
+        <header className="sticky top-0 z-40 flex items-center justify-between gap-3 px-4 md:px-6 h-14 border-b"
+          style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+          <button onClick={() => setMobileOpen(!mobileOpen)} className="lg:hidden p-2 rounded-md hover:bg-[var(--surface-2)]" style={{ color: 'var(--text-muted)' }}>
             <Menu className="w-5 h-5" />
           </button>
-
-          {/* Search */}
-          <button
-            onClick={() => setShowSearch(true)}
-            className="hidden md:flex items-center gap-3 px-4 py-2 w-72 bg-slate-50 border border-slate-200 rounded-lg text-slate-500 hover:border-slate-300 transition-colors"
-          >
-            <Search className="w-4 h-4" />
-            <span className="text-sm">Search...</span>
-            <kbd className="ml-auto text-xs text-slate-600 bg-slate-900 px-1.5 py-0.5 rounded">⌘K</kbd>
+          <button onClick={() => setShowSearch(true)}
+            className="hidden md:flex items-center gap-2 px-3 py-1.5 w-64 rounded-md text-sm transition-colors hover:bg-[var(--surface-2)]"
+            style={{ border: '1px solid var(--border)', color: 'var(--text-subtle)' }}>
+            <Search className="w-4 h-4" /> <span>Search...</span>
+            <kbd className="ml-auto text-xs px-1.5 py-0.5 rounded" style={{ background: 'var(--surface-2)' }}>⌘K</kbd>
           </button>
 
-          {/* Right Side */}
-          <div className="flex items-center gap-2">
-            {/* Quick Links */}
-            <div className="hidden md:flex items-center gap-1 mr-2">
-              <NavLink
-                to="/docs"
-                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-                title="Documentation"
-              >
-                <BookOpen className="w-4 h-4" />
-              </NavLink>
-            </div>
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button onClick={toggle} className="p-2 rounded-md transition-colors hover:bg-[var(--surface-2)]" style={{ color: 'var(--text-muted)' }} title="Toggle theme">
+              {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+            </button>
 
-            {/* Notifications */}
             <div className="relative">
-              <button
-                onClick={() => {
-                  setShowNotifs(!showNotifs)
-                  if (!showNotifs && unreadCount > 0) markAllRead()
-                }}
-                className="relative p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              >
-                <Bell className="w-5 h-5" />
+              <button onClick={() => { setShowNotifs(!showNotifs); if (!showNotifs && unreadCount > 0) markAllRead() }}
+                className="relative p-2 rounded-md transition-colors hover:bg-[var(--surface-2)]" style={{ color: 'var(--text-muted)' }}>
+                <Bell className="w-4 h-4" />
                 {unreadCount > 0 && (
-                  <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                  <span className="absolute top-0.5 right-0.5 w-4 h-4 text-[10px] font-bold rounded-full flex items-center justify-center" style={{ background: 'var(--critical-border)', color: '#fff' }}>
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}
               </button>
-
-              {/* Notifications Dropdown */}
               {showNotifs && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
-                    <span className="text-sm font-medium text-slate-200">Notifications</span>
-                    <button
-                      onClick={() => setShowNotifs(false)}
-                      className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-700 transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                <div className="absolute right-0 top-full mt-1 w-80 card-elevated overflow-hidden z-50">
+                  <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
+                    <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>Notifications</span>
+                    <button onClick={() => setShowNotifs(false)} className="p-1 rounded hover:bg-[var(--surface-2)]" style={{ color: 'var(--text-subtle)' }}><X className="w-4 h-4" /></button>
                   </div>
-                  <div className="max-h-96 overflow-y-auto">
+                  <div className="max-h-96 overflow-y-auto scrollbar">
                     {notifications.length === 0 ? (
-                      <div className="px-4 py-8 text-center">
-                        <Bell className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-                        <p className="text-sm text-slate-500">No notifications</p>
+                      <div className="px-4 py-8 text-center text-sm" style={{ color: 'var(--text-subtle)' }}>No notifications</div>
+                    ) : notifications.slice(0, 20).map(n => (
+                      <div key={n.id} className="px-4 py-3 border-b transition-colors hover:bg-[var(--surface-2)]" style={{ borderColor: 'var(--border)' }}>
+                        <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{n.title}</p>
+                        {n.body && <p className="text-xs mt-0.5 line-clamp-2" style={{ color: 'var(--text-muted)' }}>{n.body}</p>}
+                        <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>{new Date(n.created_at).toLocaleString()}</p>
                       </div>
-                    ) : (
-                      notifications.slice(0, 20).map(n => (
-                        <div
-                          key={n.id}
-                          className={`px-4 py-3 border-b border-slate-800 hover:bg-slate-750 transition-colors ${!n.read_at ? 'bg-blue-500/5' : ''}`}
-                        >
-                          <div className="flex items-start gap-2">
-                            {!n.read_at && (
-                              <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5 flex-shrink-0" />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-slate-200 font-medium">{n.title}</p>
-                              {n.body && (
-                                <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{n.body}</p>
-                              )}
-                              <p className="text-xs text-slate-600 mt-1">
-                                {new Date(n.created_at).toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
+                    ))}
                   </div>
                   {notifications.length > 0 && (
-                    <div className="p-3 border-t border-slate-700">
-                      <Link
-                        to="/notifications"
-                        onClick={() => setShowNotifs(false)}
-                        className="block text-center text-sm text-blue-400 hover:text-blue-300"
-                      >
-                        View all notifications
-                      </Link>
-                    </div>
+                    <Link to="/app/notifications" onClick={() => setShowNotifs(false)}
+                      className="block text-center text-sm py-2.5 border-t transition-colors hover:bg-[var(--surface-2)]" style={{ color: 'var(--accent)', borderColor: 'var(--border)' }}>View all</Link>
                   )}
                 </div>
               )}
             </div>
 
-            {/* Quick Actions */}
-            <Link
-              to="/scans"
-              className="hidden md:flex btn-primary text-sm py-1.5"
-            >
-              <Play className="w-4 h-4" />
-              New Scan
-            </Link>
+            <Link to="/app/scans" className="hidden md:flex btn-primary btn-sm"><Play className="w-3.5 h-3.5" /> New Scan</Link>
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex-1 overflow-auto scrollbar">{children}</main>
 
-        {/* Footer */}
-        <footer className="hidden md:flex items-center justify-between px-6 py-3 border-t border-slate-200 text-xs text-slate-500 bg-white">
-          <div className="flex items-center gap-4">
-            <span>OmniGuard v1.0.0</span>
-            <span>·</span>
-            <NavLink to="/audit-logs" className="flex items-center gap-1 hover:text-slate-400">
-              <Activity className="w-3 h-3" />
-              Audit Logs
-            </NavLink>
+        <footer className="hidden md:flex items-center justify-between px-6 py-3 border-t text-xs" style={{ borderColor: 'var(--border)', color: 'var(--text-subtle)', background: 'var(--surface)' }}>
+          <div className="flex items-center gap-3">
+            <span>OmniGuard v2.0</span><span>·</span>
+            <NavLink to="/app/audit-logs" className="hover:text-[var(--text)]">Audit Logs</NavLink>
           </div>
           <div className="flex items-center gap-4">
-            <NavLink to="/settings" className="hover:text-slate-400">Settings</NavLink>
-            <a href="mailto:support@omniguard.io" className="hover:text-slate-400">Support</a>
+            <NavLink to="/app/settings" className="hover:text-[var(--text)]">Settings</NavLink>
+            <a href="mailto:support@omniguard.io" className="hover:text-[var(--text)]">Support</a>
           </div>
         </footer>
       </div>
 
-      {/* Search Modal */}
       <SearchModal open={showSearch} onClose={() => setShowSearch(false)} />
     </div>
   )
