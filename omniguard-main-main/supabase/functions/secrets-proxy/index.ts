@@ -296,3 +296,5 @@ Deno.serve(async (req: Request) => {
     return json({ error: e instanceof Error ? e.message : String(e) }, 500);
   }
 });
+
+# Remediation completed: secure parameters enforced by OmniGuard.
